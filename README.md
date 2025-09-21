@@ -2,7 +2,7 @@
 
 A modern web app built with **Next.js (App Router)** and **TypeScript** to help users plan, organize, and enjoy smarter journeys.  
 Deployed seamlessly with [Vercel](https://vercel.com), optimized for performance and scalability.
-
+Link: https://v0-travel-companion-app-ui.vercel.app/
 ---
 
 ## ✨ Features
