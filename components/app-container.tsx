@@ -9,6 +9,8 @@ import { AnalyticsScreen } from "@/components/analytics-screen"
 import { RecommendationsScreen } from "@/components/recommendations-screen"
 import { RewardsScreen } from "@/components/rewards-screen"
 import { WeatherScreen } from "@/components/weather-screen"
+import { BusinessTravelScreen } from "@/components/business-travel-screen"
+import { ExpenseTrackingScreen } from "@/components/expense-tracking-screen"
 
 export function AppContainer() {
   const [currentScreen, setCurrentScreen] = useState("dashboard")
@@ -29,6 +31,10 @@ export function AppContainer() {
         return <RewardsScreen />
       case "weather":
         return <WeatherScreen />
+      case "business":
+        return <BusinessTravelScreen />
+      case "expenses":
+        return <ExpenseTrackingScreen />
       default:
         return <DashboardScreen />
     }

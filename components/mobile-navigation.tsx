@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
-import { Home, MapPin, Users, BarChart3, Lightbulb, Award, Cloud, Menu, X } from "lucide-react"
+import { Home, MapPin, Users, BarChart3, Lightbulb, Award, Cloud, Menu, X, Briefcase, Receipt } from "lucide-react"
 
 interface NavigationProps {
   currentScreen: string
@@ -21,6 +21,8 @@ export function MobileNavigation({ currentScreen, onNavigate }: NavigationProps)
     { id: "recommendations", label: "Recommendations", icon: Lightbulb },
     { id: "rewards", label: "Rewards", icon: Award },
     { id: "weather", label: "Weather", icon: Cloud },
+    { id: "business", label: "Business Travel", icon: Briefcase },
+    { id: "expenses", label: "Expense Tracking", icon: Receipt },
   ]
 
   return (
