@@ -1,8 +1,10 @@
 import { createClient } from "@/lib/supabase/server"
 import { type NextRequest, NextResponse } from "next/server"
+import { tripSchema } from "@/lib/validation"
+import { withSecurity } from "@/lib/security"
+import { handleError, AppError, ErrorCodes } from "@/lib/error-handler"
 
-// GET /api/trips - Get all trips for the authenticated user
-export async function GET(request: NextRequest) {
+async function handleGET(request: NextRequest) {
   try {
     const supabase = await createClient()
 
@@ -10,17 +12,19 @@ export async function GET(request: NextRequest) {
       data: { user },
       error: authError,
     } = await supabase.auth.getUser()
+
     if (authError || !user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+      throw new AppError(ErrorCodes.UNAUTHORIZED, "User not authenticated", 401)
     }
 
     const { searchParams } = new URL(request.url)
     const status = searchParams.get("status")
-    const limit = searchParams.get("limit")
+    const limit = Math.min(Number.parseInt(searchParams.get("limit") || "10"), 100) // Cap at 100
 
     let query = supabase
       .from("trips")
-      .select(`
+      .select(
+        `
         *,
         trip_companions(
           id,
@@ -28,32 +32,30 @@ export async function GET(request: NextRequest) {
           status,
           profiles!trip_companions_companion_user_id_fkey(full_name)
         )
-      `)
+      `,
+      )
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
+      .limit(limit)
 
-    if (status) {
+    if (status && ["active", "completed", "cancelled"].includes(status)) {
       query = query.eq("status", status)
-    }
-
-    if (limit) {
-      query = query.limit(Number.parseInt(limit))
     }
 
     const { data: trips, error } = await query
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      throw new AppError(ErrorCodes.DB_ERROR, error.message, 500)
     }
 
-    return NextResponse.json({ trips })
+    return NextResponse.json({ trips, count: trips?.length || 0 })
   } catch (error) {
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    const response = handleError(error)
+    return NextResponse.json(response.body, { status: response.status })
   }
 }
 
-// POST /api/trips - Create a new trip
-export async function POST(request: NextRequest) {
+async function handlePOST(request: NextRequest) {
   try {
     const supabase = await createClient()
 
@@ -61,17 +63,22 @@ export async function POST(request: NextRequest) {
       data: { user },
       error: authError,
     } = await supabase.auth.getUser()
+
     if (authError || !user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+      throw new AppError(ErrorCodes.UNAUTHORIZED, "User not authenticated", 401)
     }
 
     const body = await request.json()
-    const { trip_number, origin, destination, transport_mode, start_time, end_time, distance_km } = body
 
-    // Validate required fields
-    if (!trip_number || !origin || !destination || !transport_mode || !start_time) {
-      return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
+    // Validate request body
+    const validationResult = tripSchema.safeParse(body)
+    if (!validationResult.success) {
+      const errors = validationResult.error.errors.map((e) => `${e.path.join(".")}: ${e.message}`)
+      throw new AppError(ErrorCodes.VALIDATION_ERROR, "Invalid request data", 400, { errors })
     }
+
+    const { trip_number, origin, destination, transport_mode, start_time, end_time, distance_km } =
+      validationResult.data
 
     const { data: trip, error } = await supabase
       .from("trips")
@@ -82,19 +89,44 @@ export async function POST(request: NextRequest) {
         destination,
         transport_mode,
         start_time,
-        end_time,
-        distance_km,
+        end_time: end_time || null,
+        distance_km: distance_km || 0,
         status: "active",
       })
       .select()
       .single()
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      if (error.code === "23505") {
+        // Unique constraint violation
+        throw new AppError(ErrorCodes.DUPLICATE_RECORD, "Trip already exists", 409)
+      }
+      throw new AppError(ErrorCodes.DB_ERROR, error.message, 500)
     }
 
     return NextResponse.json({ trip }, { status: 201 })
   } catch (error) {
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    const response = handleError(error)
+    return NextResponse.json(response.body, { status: response.status })
   }
+}
+
+export async function GET(request: NextRequest) {
+  return withSecurity(handleGET, {
+    requireAuth: true,
+    rateLimit: {
+      windowMs: 60000,
+      maxRequests: 30,
+    },
+  })(request, {})
+}
+
+export async function POST(request: NextRequest) {
+  return withSecurity(handlePOST, {
+    requireAuth: true,
+    rateLimit: {
+      windowMs: 60000,
+      maxRequests: 10,
+    },
+  })(request, {})
 }
